@@ -47,7 +47,10 @@ Create a `.env` file:
 
 ```env
 DISCORD_TOKEN=your-discord-bot-token
-PREFIX=!
+GUILD_ID=your-guild-id
+PURGE_ROLE_ID=role-id-for-higher-permissions
+
+API_URL=https://your-domain.com
 ```
 
 ---
@@ -55,7 +58,7 @@ PREFIX=!
 ## 🚀 Usage
 
 ```bash
-python bot.py
+python main.py
 ```
 
 * `!extract <message_id>` – Extracts all content from a Discord message.
