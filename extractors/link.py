@@ -52,14 +52,14 @@ async def extract_link_metadata(url: str, timeout: int = 10) -> Tuple[
         return None, None, None, None, note
 
     # TikTok
-    if "tiktok.com" in domain:
+    #if "tiktok.com" in domain:
         title, subtitle, media_url, content, media_type = await get_tiktok_metadata(url)
         note = "TikTok links are not fully supported. Please verify manually."
         content = f"{content}\n\n{url}" if content else url
         return title, subtitle, media_url, content, note
 
     # Reddit
-    if "reddit.com" in domain:
+    #if "reddit.com" in domain:
         title, subtitle, media_url, content, media_type = await get_reddit_metadata(url)
         if title:
             note = "Reddit posts may contain multiple media items. Only the first item is used."
