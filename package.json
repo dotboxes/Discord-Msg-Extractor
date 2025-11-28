@@ -1,0 +1,10 @@
+{
+  "dependencies": {
+    "beautifulsoup4": "^0.0.1-security"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.56.1",
+    "@types/node": "^24.8.1"
+  },
+  "scripts": {}
+}
