@@ -115,9 +115,6 @@ async def process_archive(interaction: discord.Interaction, message: discord.Mes
             if not cleaned_content or not cleaned_content.strip():
                 cleaned_content = raw_text
 
-            # Append URLs at the end as sources
-            if urls:
-                cleaned_content = f"{cleaned_content}\n\n" + "\n".join(urls)
 
             # Candidate subtitle if missing
             if not subtitle:
