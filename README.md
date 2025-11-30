@@ -90,7 +90,7 @@ The bot outputs extracted media and links in a structured format:
 * Fork → Branch → PR
 * Contributions welcome!
 
----
+--- 
 
 ## 📧 Support
 
