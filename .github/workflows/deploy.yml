@@ -2,19 +2,26 @@ name: Deploy to Server
 
 on:
   push:
-    branches: [main]
+    branches: [master]
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
+      - name: Connect to Tailscale
+        uses: tailscale/github-action@v2
+        with:
+          oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
+          oauth-secret: ${{ secrets.TS_OAUTH_SECRET }}
+          tags: tag:ci
+
       - name: Deploy to Server
         uses: appleboy/ssh-action@master
         with:
-          host: ${{ secrets.SERVER_HOST }}
+          host: ${{ secrets.SERVER_TAILSCALE_IP }}
           username: ${{ secrets.SERVER_USER }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           script: |
             cd ${{ secrets.BOT_PATH }}
-            git pull origin main
+            git pull origin master
             sudo systemctl restart ${{ secrets.SERVICE_NAME }}
