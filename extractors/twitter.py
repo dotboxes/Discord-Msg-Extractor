@@ -1,4 +1,6 @@
 import re
+import os
+import hashlib
 from typing import Optional, Dict, Tuple
 from bs4 import BeautifulSoup
 
@@ -8,6 +10,113 @@ from extractors.base import get_meta_content
 from utils.normalize import normalize_title, normalize_subtitle
 
 DEFAULT_PLACEHOLDER = "https://dummyimage.com/600x400/e0e0e0/555.png&text=No+Image"
+
+# Configure your video storage paths
+VIDEO_STORAGE_DIR = "/path/to/public/videos"  # Change this to your actual path
+VIDEO_URL_PREFIX = "/videos"  # URL path to access videos
+THUMBNAIL_STORAGE_DIR = "/path/to/public/videos/thumbnails"  # Change this to your actual path
+THUMBNAIL_URL_PREFIX = "/videos/thumbnails"
+
+
+# ---------- Video Download utilities ----------
+
+async def download_video(video_url: str) -> Optional[Tuple[str, str]]:
+    """
+    Download a video file and generate a thumbnail.
+    Returns (video_path, thumbnail_path) as URL paths, or None if failed.
+    """
+    try:
+        # Create directories if they don't exist
+        os.makedirs(VIDEO_STORAGE_DIR, exist_ok=True)
+        os.makedirs(THUMBNAIL_STORAGE_DIR, exist_ok=True)
+
+        # Generate unique filename based on URL hash
+        url_hash = hashlib.md5(video_url.encode()).hexdigest()[:12]
+
+        # Determine file extension
+        extension = '.mp4'  # Default to mp4
+        if video_url.lower().endswith('.webm'):
+            extension = '.webm'
+        elif video_url.lower().endswith('.mov'):
+            extension = '.mov'
+
+        video_filename = f"twitter_{url_hash}{extension}"
+        thumbnail_filename = f"twitter_{url_hash}.jpg"
+
+        video_filepath = os.path.join(VIDEO_STORAGE_DIR, video_filename)
+        thumbnail_filepath = os.path.join(THUMBNAIL_STORAGE_DIR, thumbnail_filename)
+
+        # Check if video already exists
+        if os.path.exists(video_filepath):
+            print(f"Video already exists: {video_filepath}")
+            video_url_path = f"{VIDEO_URL_PREFIX}/{video_filename}"
+            thumbnail_url_path = f"{THUMBNAIL_URL_PREFIX}/{thumbnail_filename}"
+
+            # Return existing paths
+            if os.path.exists(thumbnail_filepath):
+                return video_url_path, thumbnail_url_path
+            else:
+                return video_url_path, None
+
+        # Download the video
+        print(f"Downloading video from: {video_url}")
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+        }
+
+        resp = await http_get(video_url, headers=headers, timeout=30)
+
+        if not resp or resp.status_code != 200:
+            print(f"Failed to download video: status {resp.status_code if resp else 'No response'}")
+            return None
+
+        # Save video file
+        with open(video_filepath, 'wb') as f:
+            f.write(resp.content)
+
+        print(f"Video downloaded successfully: {video_filepath}")
+
+        # Generate thumbnail using ffmpeg
+        thumbnail_url_path = None
+        try:
+            import subprocess
+
+            # Use ffmpeg to extract a frame at 1 second
+            ffmpeg_cmd = [
+                'ffmpeg',
+                '-i', video_filepath,
+                '-ss', '00:00:01.000',
+                '-vframes', '1',
+                '-vf', 'scale=640:-1',
+                '-y',  # Overwrite output file
+                thumbnail_filepath
+            ]
+
+            result = subprocess.run(
+                ffmpeg_cmd,
+                capture_output=True,
+                text=True,
+                timeout=10
+            )
+
+            if result.returncode == 0 and os.path.exists(thumbnail_filepath):
+                print(f"Thumbnail generated: {thumbnail_filepath}")
+                thumbnail_url_path = f"{THUMBNAIL_URL_PREFIX}/{thumbnail_filename}"
+            else:
+                print(f"Failed to generate thumbnail: {result.stderr}")
+
+        except Exception as e:
+            print(f"Error generating thumbnail: {e}")
+            # Thumbnail generation failed, but video is still available
+
+        video_url_path = f"{VIDEO_URL_PREFIX}/{video_filename}"
+        return video_url_path, thumbnail_url_path
+
+    except Exception as e:
+        print(f"Error downloading video: {e}")
+        import traceback
+        traceback.print_exc()
+        return None
 
 
 # ---------- Twitter/X utilities ----------
@@ -58,19 +167,19 @@ def is_video_url(url: str) -> bool:
 
 
 async def get_twitter_metadata(url: str) -> Tuple[
-    Optional[str], Optional[str], Optional[str], Optional[str], Optional[str]]:
+    Optional[str], Optional[str], Optional[str], Optional[str], Optional[str], Optional[str]]:
     """
-    Extract title, subtitle, media URL, content, and media type from a Twitter/X URL.
-    Returns (title, subtitle, media_url, content, media_type)
+    Extract title, subtitle, media URL, content, media type, and thumbnail from a Twitter/X URL.
+    Returns (title, subtitle, media_url, content, media_type, thumbnail_url)
     """
     try:
         tweet_id = extract_tweet_id(url)
         if not tweet_id:
-            return None, None, None, None, None
+            return None, None, None, None, None, None
 
         tweet_data = await get_tweet_data(tweet_id)
         if not tweet_data or not isinstance(tweet_data, dict):
-            return None, None, None, None, None
+            return None, None, None, None, None, None
 
         # Get the FULL tweet text (don't remove URLs for content)
         full_text = tweet_data.get("text", "")
@@ -94,6 +203,7 @@ async def get_twitter_metadata(url: str) -> Tuple[
         # Media: try multiple sources
         media_url = None
         media_type = None
+        thumbnail_url = None
 
         # 1. Try the media photos/videos first
         media_obj = tweet_data.get("media")
@@ -105,10 +215,21 @@ async def get_twitter_metadata(url: str) -> Tuple[
             if isinstance(videos, list) and len(videos) > 0:
                 video = videos[0]
                 if isinstance(video, dict):
-                    media_url = video.get("url")
-                    if media_url:
-                        media_type = "video"
-                        print(f"DEBUG - Found video URL: {media_url}")
+                    remote_video_url = video.get("url")
+                    if remote_video_url:
+                        print(f"DEBUG - Found video URL: {remote_video_url}")
+
+                        # Download the video
+                        download_result = await download_video(remote_video_url)
+                        if download_result:
+                            media_url, thumbnail_url = download_result
+                            media_type = "video"
+                            print(f"DEBUG - Video downloaded: {media_url}, thumbnail: {thumbnail_url}")
+                        else:
+                            # If download fails, fall back to remote URL
+                            media_url = remote_video_url
+                            media_type = "video"
+                            print(f"DEBUG - Video download failed, using remote URL")
 
             # Try photos if no video
             if not media_url:
@@ -127,10 +248,21 @@ async def get_twitter_metadata(url: str) -> Tuple[
                 if isinstance(m, dict):
                     m_type = m.get("type")
                     if m_type in ("video", "gif"):
-                        media_url = m.get("url")
-                        if media_url:
-                            media_type = "video"
-                            print(f"DEBUG - Found media from list (video): {media_url}")
+                        remote_video_url = m.get("url")
+                        if remote_video_url:
+                            print(f"DEBUG - Found media from list (video): {remote_video_url}")
+
+                            # Download the video
+                            download_result = await download_video(remote_video_url)
+                            if download_result:
+                                media_url, thumbnail_url = download_result
+                                media_type = "video"
+                                print(f"DEBUG - Video downloaded: {media_url}, thumbnail: {thumbnail_url}")
+                            else:
+                                # If download fails, fall back to remote URL
+                                media_url = remote_video_url
+                                media_type = "video"
+                                print(f"DEBUG - Video download failed, using remote URL")
                             break
                     elif m_type in ("photo", "image"):
                         media_url = m.get("url")
@@ -191,10 +323,10 @@ async def get_twitter_metadata(url: str) -> Tuple[
             print(f"DEBUG - No media found, using placeholder: {media_url}")
 
         print(
-            f"DEBUG - Final metadata: title={title}, subtitle={subtitle}, media_url={media_url}, content_length={len(content) if content else 0}, media_type={media_type}")
-        return title, subtitle, media_url, content, media_type
+            f"DEBUG - Final metadata: title={title}, subtitle={subtitle}, media_url={media_url}, content_length={len(content) if content else 0}, media_type={media_type}, thumbnail={thumbnail_url}")
+        return title, subtitle, media_url, content, media_type, thumbnail_url
     except Exception as e:
         print(f"Error in get_twitter_metadata: {e}")
         import traceback
         traceback.print_exc()
-        return None, None, None, None, None
+        return None, None, None, None, None, None
