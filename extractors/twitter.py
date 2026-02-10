@@ -98,10 +98,10 @@ def is_video_url(url: str) -> bool:
 
 
 async def get_twitter_metadata(url: str) -> Tuple[
-    Optional[str], Optional[str], Optional[str], Optional[str], Optional[str]]:
+    Optional[str], Optional[str], Optional[str], Optional[str], Optional[Dict]]:
     """
-    Extract title, subtitle, media URL, content, and media type from a Twitter/X URL.
-    Returns (title, subtitle, media_url, content, media_type)
+    Returns (title, subtitle, media_url, content, extra_info)
+    extra_info = {'media_type': 'video'|'image', 'thumbnail_url': str|None}
     """
     try:
         tweet_id = extract_tweet_id(url)
@@ -109,56 +109,62 @@ async def get_twitter_metadata(url: str) -> Tuple[
             return None, None, None, None, None
 
         tweet_data = await get_tweet_data(tweet_id)
-        if not tweet_data or not isinstance(tweet_data, dict):
+        if not tweet_data:
             return None, None, None, None, None
 
         full_text = tweet_data.get("text", "")
-        title = re.sub(r'https?://\S+', '', full_text).strip()
-        title = normalize_title(title or None)
-
+        title = normalize_title(re.sub(r'https?://\S+', '', full_text).strip() or None)
         author = tweet_data.get("author")
         subtitle = normalize_subtitle(author.get("name") if isinstance(author, dict) else None)
-
         content = full_text if full_text else None
+
         media_url = None
         media_type = None
-
+        thumbnail_url = None
         media_obj = tweet_data.get("media")
+
+        # --- VIDEO first ---
         if isinstance(media_obj, dict):
             videos = media_obj.get("videos", [])
             if videos:
                 remote_video_url = videos[0].get("url")
                 if remote_video_url:
-                    media_url = await download_video(remote_video_url)
+                    media_url, thumbnail_url = await download_video(remote_video_url)
                     media_type = "video" if media_url else None
-            if not media_url:
-                photos = media_obj.get("photos", [])
-                if photos:
-                    media_url = photos[0].get("url")
-                    media_type = "image" if media_url else None
+
         elif isinstance(media_obj, list):
             for m in media_obj:
                 m_type = m.get("type")
                 if m_type in ("video", "gif"):
                     remote_video_url = m.get("url")
                     if remote_video_url:
-                        media_url = await download_video(remote_video_url)
+                        media_url, thumbnail_url = await download_video(remote_video_url)
                         media_type = "video" if media_url else None
                         break
-                elif m_type in ("photo", "image"):
-                    media_url = m.get("url")
-                    media_type = "image" if media_url else None
-                    break
 
-        # Fallback to placeholder
+        # --- PHOTOS fallback ---
+        if not media_url:
+            if isinstance(media_obj, dict):
+                photos = media_obj.get("photos", [])
+                if photos:
+                    media_url = photos[0].get("url")
+                    media_type = "image" if media_url else None
+            elif isinstance(media_obj, list):
+                for m in media_obj:
+                    if m.get("type") in ("photo", "image"):
+                        media_url = m.get("url")
+                        media_type = "image" if media_url else None
+                        break
+
+        # --- Placeholder fallback ---
         if not media_url:
             media_url = DEFAULT_PLACEHOLDER
             media_type = "image"
 
-        return title, subtitle, media_url, content, media_type
+        extra_info = {"media_type": media_type, "thumbnail_url": thumbnail_url}
+        return title, subtitle, media_url, content, extra_info
 
-    except Exception as e:
-        print(f"Error in get_twitter_metadata: {e}")
-        import traceback
-        traceback.print_exc()
+    except Exception:
         return None, None, None, None, None
+
+
