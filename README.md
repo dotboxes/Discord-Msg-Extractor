@@ -25,7 +25,8 @@ A Python Discord bot that extracts content from messages and converts them into 
 | **Reddit**        | ![red](https://img.shields.io/badge/Images-❌-red?style=flat-square)     | ![red](https://img.shields.io/badge/Videos-❌-red?style=flat-square)       | Currently not supported                                                        |
 | **YouTube**       | ![green](https://img.shields.io/badge/Images-✅-green?style=flat-square) | ![green](https://img.shields.io/badge/Videos-✅-green?style=flat-square)   | Extracts video links and thumbnails                                            |
 | **Generic Links** | ![green](https://img.shields.io/badge/Links-✅-green?style=flat-square)  | ![green](https://img.shields.io/badge/Videos-✅-green?style=flat-square)     | Works for most sites, some broken links                                        |
-
+> [!WARNING]
+> Due to Discord's own limitations, source URL to files/attachments/images/videos in the message cannot be extracted.
 ---
 
 ## ⚙️ Installation
