@@ -62,14 +62,8 @@ class Purge(commands.Cog):
             )
             return
 
-        if depth is not None and amount is not None:
-            await interaction.response.send_message(
-                "❌ Please provide only one of `amount` or `depth`, not both.", ephemeral=True
-            )
-            return
-
         # --- Depth mode ---
-        if depth != 0:
+        if depth is not None:
             if depth < 1 or depth > 100:
                 await interaction.response.send_message(
                     "❌ Depth must be between 1 and 100.", ephemeral=True
@@ -86,11 +80,9 @@ class Purge(commands.Cog):
                 return
 
             if amount:
-                # Delete `amount` messages starting from depth position downward
                 messages_to_delete = history[depth - 1: depth - 1 + amount]
                 confirm_text = f"⚠️ Delete **{len(messages_to_delete)}** message(s) starting at depth **{depth}**?"
             else:
-                # Delete only the single message at depth
                 messages_to_delete = [history[depth - 1]]
                 target = messages_to_delete[0]
                 preview = target.content[:60] + ("..." if len(target.content) > 60 else "")
@@ -102,7 +94,7 @@ class Purge(commands.Cog):
             view.message = await interaction.original_response()
             return
 
-        # --- Amount mode: delete N most recent messages ---
+        # --- Amount mode ---
         if amount < 1 or amount > 25:
             await interaction.response.send_message("❌ Amount must be between 1 and 25.", ephemeral=True)
             return
