@@ -62,29 +62,22 @@ class Purge(commands.Cog):
             )
             return
 
-        # --- Validate inputs ---
-        if depth is None and amount is None:
-            await interaction.response.send_message(
-                "❌ Please provide either `amount` or `depth`.", ephemeral=True
-            )
-            return
-
         if depth is not None and amount is not None:
             await interaction.response.send_message(
                 "❌ Please provide only one of `amount` or `depth`, not both.", ephemeral=True
             )
             return
 
-        # --- Depth mode: delete the single message N positions above ---
-        if depth is not None:
+        # --- Depth mode ---
+        if depth != 0:
             if depth < 1 or depth > 100:
                 await interaction.response.send_message(
                     "❌ Depth must be between 1 and 100.", ephemeral=True
                 )
                 return
 
-            # Fetch enough messages to reach the target depth
-            history = [msg async for msg in interaction.channel.history(limit=depth)]
+            fetch_limit = max(depth, amount) if amount else depth
+            history = [msg async for msg in interaction.channel.history(limit=fetch_limit)]
 
             if len(history) < depth:
                 await interaction.response.send_message(
@@ -92,17 +85,20 @@ class Purge(commands.Cog):
                 )
                 return
 
-            # history[0] = most recent, history[depth-1] = Nth message above
-            target = history[depth - 1]
-            preview = target.content[:60] + ("..." if len(target.content) > 60 else "")
-            preview = preview or "[no text content]"
+            if amount:
+                # Delete `amount` messages starting from depth position downward
+                messages_to_delete = history[depth - 1: depth - 1 + amount]
+                confirm_text = f"⚠️ Delete **{len(messages_to_delete)}** message(s) starting at depth **{depth}**?"
+            else:
+                # Delete only the single message at depth
+                messages_to_delete = [history[depth - 1]]
+                target = messages_to_delete[0]
+                preview = target.content[:60] + ("..." if len(target.content) > 60 else "")
+                preview = preview or "[no text content]"
+                confirm_text = f"⚠️ Delete message at depth **{depth}** by **{target.author.display_name}**?\n> {preview}"
 
-            view = PurgeConfirmView(interaction.channel, [target], label="depth")
-            await interaction.response.send_message(
-                f"⚠️ Delete message at depth **{depth}** by **{target.author.display_name}**?\n> {preview}",
-                view=view,
-                ephemeral=True,
-            )
+            view = PurgeConfirmView(interaction.channel, messages_to_delete, label="depth")
+            await interaction.response.send_message(confirm_text, view=view, ephemeral=True)
             view.message = await interaction.original_response()
             return
 
