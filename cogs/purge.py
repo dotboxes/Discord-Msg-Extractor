@@ -70,7 +70,7 @@ class Purge(commands.Cog):
                 )
                 return
 
-            fetch_limit = max(depth, amount) if amount else depth
+            fetch_limit = (depth - 1 + amount) if amount else depth
             history = [msg async for msg in interaction.channel.history(limit=fetch_limit)]
 
             if len(history) < depth:
